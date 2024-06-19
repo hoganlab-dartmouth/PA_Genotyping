@@ -1,0 +1,11 @@
+name: multiqc
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - nomkl
+  - python=3.10
+  - multiqc==1.12
+variables:
+  PYTHONIOENCODING: utf-8

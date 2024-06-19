@@ -1,0 +1,284 @@
+import pandas as pd
+
+configfile: "config.yaml"
+
+
+
+output_dir = config["output_dir"]
+samples_df = pd.read_table(config["sample_tsv"]).set_index("sample_id", drop=False)
+sample_list = list(samples_df['sample_id'])
+assembly_path = config["assembly_path"]
+
+
+rule all:
+    input:
+        expand("{output_dir}/fastqc/{sample}/{sample}_fastqc.zip", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/trimmed_merged/{sample}_R1.fastq.gz", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/trimmed_merged/{sample}_R2.fastq.gz", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/alignment/{sample}.srt.bam.bai", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/markdup/{sample}.mkdup.bam", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/freebayes/{sample}.raw.vcf", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/merged_matrix/merged.raw.vcf", output_dir=config["output_dir"]),
+        expand("{assembly_path}/assembly/{sample}/scaffolds.fasta", sample=sample_list, assembly_path=config["assembly_path"]),
+        expand("{output_dir}/snpeff/{sample}.ann.vcf", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/snpeff/{sample}.ann.tsv", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/merged_matrix/merged.ann.tsv", output_dir=config["output_dir"]),
+        expand("{output_dir}/assembly/{sample}/scaffolds_to_ref.bam", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{output_dir}/lumpy/{sample}.raw.vcf", sample=sample_list, output_dir=config["output_dir"]),
+        expand("{assembly_path}/annotation/{sample}/{sample}.gbk", sample=sample_list, assembly_path=config["assembly_path"]),
+        expand("{output_dir}/quast_reports/report.html", output_dir=config["output_dir"])
+
+    params:
+        output_dir = config["output_dir"],
+    conda:
+        "env_config/multiqc.yaml",
+    output:
+        expand("{output_dir}/multiqc_report.html", output_dir=config["output_dir"]) 
+    shell: """
+        multiqc {params.output_dir}/fastqc {params.output_dir}/alignment {params.output_dir}/markdup -o {params.output_dir}
+"""
+
+
+rule fastqc:
+    output: "{output_dir}/fastqc/{sample}/{sample}_fastqc.html",
+            "{output_dir}/fastqc/{sample}/{sample}_fastqc.zip" ##fix this to not hardcode 1M
+    params:
+        sample = lambda wildcards:  wildcards.sample,
+        fastqc = config["fastqc_path"],
+        fastq_file_1 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_1"],
+    conda:
+        "env_config/fastqc.yaml",
+    resources: threads="6", maxtime="3:00:00", memory="8gb",
+    shell: """
+            mkdir  -p {output_dir}/fastqc/{params.sample}
+            {params.fastqc} -t 2 -o {output_dir}/fastqc/{params.sample} {params.fastq_file_1}
+            mv {output_dir}/fastqc/{params.sample}/*{params.sample}*fastqc.html {output_dir}/fastqc/{params.sample}/{params.sample}_fastqc.html
+            mv {output_dir}/fastqc/{params.sample}/*{params.sample}*fastqc.zip {output_dir}/fastqc/{params.sample}/{params.sample}_fastqc.zip
+"""
+
+
+rule trim_merge:
+    output: "{output_dir}/trimmed_merged/{sample}_R1.fastq.gz",
+            "{output_dir}/trimmed_merged/{sample}_R2.fastq.gz"
+    params:
+        sample = lambda wildcards:  wildcards.sample,
+        trimmomatic = config["trimmomatic_path"],
+        trimmomatic_adapters = config["trimmomatic_adapters"],
+        fastq_list_1 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_1"],
+        fastq_list_2 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_2"], #if config["layout"]=="paired" else "None",
+    conda:
+        "env_config/trim_merge.yaml",
+    resources: threads="6", maxtime="2:00:00", memory="6gb",
+    shell: """
+        {params.trimmomatic}  PE -threads 4 {params.fastq_list_1} {params.fastq_list_2} {output_dir}/trimmed_merged/{params.sample}_R1.fastq.gz {output_dir}/trimmed_merged/{params.sample}_fwdtmp.fastq.gz  {output_dir}/trimmed_merged/{params.sample}_R2.fastq.gz {output_dir}/trimmed_merged/{params.sample}_revtmp.fastq.gz    ILLUMINACLIP:{params.trimmomatic_adapters}:2:30:10:2:keepBothReads LEADING:3 TRAILING:3 MINLEN:36
+        rm -f {output_dir}/trimmed_merged/{params.sample}_fwdtmp.fastq.gz {output_dir}/trimmed_merged/{params.sample}_revtmp.fastq.gz
+
+
+"""
+
+rule alignment:
+    input: "{output_dir}/trimmed_merged/{sample}_R1.fastq.gz",
+            "{output_dir}/trimmed_merged/{sample}_R2.fastq.gz"
+    output: "{output_dir}/alignment/{sample}.srt.bam",
+            "{output_dir}/alignment/{sample}.srt.bam.bai"
+    params:
+#        fastq_file_1 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_1"],
+#        fastq_file_2 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_2"] if config["layout"]=="paired" else "None",
+#        layout = config["layout"],
+        sample = lambda wildcards:  wildcards.sample,
+        aligner_name = config["aligner_name"],
+        aligner = config["aligner_path"],
+        aligner_index = config["aligner_index"],
+        samtools = config["samtools_path"],
+        rg = r"-R '@RG\tID:{sample}\tSM:{sample}'",
+    conda:
+        "env_config/alignment.yaml",    
+    resources: threads="6", maxtime="8:00:00", memory="8gb",
+    shell: """
+
+            {params.aligner} mem  {params.aligner_index}   {output_dir}/trimmed_merged/{params.sample}_R1.fastq.gz  {output_dir}/trimmed_merged/{params.sample}_R2.fastq.gz  -t 8 {params.rg} | {params.samtools} view -@ 2 -b | {params.samtools} sort -T /scratch/samtools_{params.sample} -@ 4 -m 512M  - 1> {output_dir}/alignment/{params.sample}.srt.bam
+           {params.samtools} index -@ 4 {output_dir}/alignment/{params.sample}.srt.bam
+
+""" 
+
+
+rule picard_markdup:
+    input: "{output_dir}/alignment/{sample}.srt.bam"
+    output: "{output_dir}/markdup/{sample}.mkdup.bam"
+    params:
+        sample = lambda wildcards:  wildcards.sample,
+        picard = config['picard_path'],
+        java = config['java_path']
+    conda:
+        "env_config/picard_markdup.yaml",
+    resources: threads="8", maxtime="24:00:00", memory="12gb",
+    shell: """
+            {params.picard} -Xmx8G -Xms8G  MarkDuplicates I={output_dir}/alignment/{params.sample}.srt.bam O={output_dir}/markdup/{params.sample}.mkdup.bam M={output_dir}/markdup/{params.sample}.mkdup.log.txt OPTICAL_DUPLICATE_PIXEL_DISTANCE=100 CREATE_INDEX=true  MAX_RECORDS_IN_RAM=4000000 ASSUME_SORTED=true MAX_FILE_HANDLES=768
+            rm -f {output_dir}/alignment/{params.sample}.srt.bam
+"""
+
+rule freebayes:
+    input: "{output_dir}/markdup/{sample}.mkdup.bam"
+    output: "{output_dir}/freebayes/{sample}.raw.vcf"
+    params:
+        sample = lambda wildcards:  wildcards.sample,
+        freebayes = config['freebayes_path'],
+        ref_fa = config['reference_fasta'],
+    conda:
+        "env_config/freebayes.yaml",
+    resources: threads="4", maxtime="24:00:00", memory="4gb",
+    shell: """
+            {params.freebayes} --min-coverage 5 --limit-coverage 100 --min-alternate-fraction 0.2 --min-mapping-quality 15 --min-alternate-count 2 -f {params.ref_fa}  {output_dir}/markdup/{params.sample}.mkdup.bam  > {output_dir}/freebayes/{params.sample}.raw.vcf
+"""
+
+rule freebayes_merge:
+    input:
+        expand("{output_dir}/markdup/{sample}.mkdup.bam", sample=sample_list, output_dir=config["output_dir"]),
+    output: "{output_dir}/merged_matrix/merged.raw.vcf" 
+    params:
+#        samples_list = expand("{output_dir}/markdup/{sample}.mkdup.bam", sample=sample_list, output_dir=config["output_dir"]),
+        freebayes = config['freebayes_path'],
+        ref_fa = config['reference_fasta'],
+    conda:
+        "env_config/freebayes.yaml",
+    resources: threads="4", maxtime="24:00:00", memory="4gb",
+    shell: """
+            {params.freebayes} --min-coverage 5 --limit-coverage 100 --min-alternate-fraction 0.2 --min-mapping-quality 15 --min-alternate-count 2 -f {params.ref_fa}  {output_dir}/markdup/*.mkdup.bam  > {output_dir}/merged_matrix/merged.raw.vcf
+"""
+#            {params.freebayes} --min-coverage 5 --limit-coverage 100 --min-alternate-fraction 0.2 --min-mapping-quality 15 --min-alternate-count 2 -f {params.ref_fa}  {output_dir}/markdup/*.mkdup.bam  > {output_dir}/merged_matrix/merged.raw.vcf
+
+#rule spades:
+#    input: "{output_dir}/trimmed_merged/{sample}_R1.fastq.gz",
+#           "{output_dir}/trimmed_merged/{sample}_R2.fastq.gz"   
+#    output: "{output_dir}/assembly/{sample}/scaffolds.fasta",
+#    params:
+#        fastq_file_1 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_1"],
+#        fastq_file_2 = lambda wildcards: samples_df.loc[wildcards.sample, "fastq_2"] if config["layout"]=="paired" else "None",
+#        layout = config["layout"],
+#        sample = lambda wildcards:  wildcards.sample,
+#        spades = config["spades_path"],
+#        aligner_index = config["aligner_index"],
+#        samtools = config["samtools_path"],
+#    conda:
+#        "env_config/spades.yaml",
+#    resources: threads="8", maxtime="16:00:00", memory="12gb",
+#    shell: """
+#        {params.spades} -t 8 --only-assembler -1 {output_dir}/trimmed_merged/{params.sample}_R1.fastq.gz  -2 {output_dir}/trimmed_merged/{params.sample}_R2.fastq.gz -o {output_dir}/assembly/{params.sample}
+#"""
+
+
+rule snpeff:
+    output: "{output_dir}/snpeff/{sample}.ann.vcf",
+            "{output_dir}/snpeff/{sample}.ann.tsv",
+    input: "{output_dir}/freebayes/{sample}.raw.vcf"
+    params:
+#        snpeff_jar = config["snpeff_jar_path"],
+        snpeff = config["snpeff_path"],
+        snpeff_conf = config["snpeff_config"],
+        snpeff_genome = config["snpeff_genome"],
+        java = config["java_path"],
+        sample = lambda wildcards:  wildcards.sample,
+    conda:
+        "env_config/snpeff.yaml",
+    resources: threads="2", maxtime="4:00:00", memory="4gb",
+    shell: """
+        {params.snpeff} -c {params.snpeff_conf} {params.snpeff_genome} {output_dir}/freebayes/{params.sample}.raw.vcf > {output_dir}/snpeff/{params.sample}.ann.vcf
+
+        vcf2tsvpy --input_vcf {output_dir}/snpeff/{params.sample}.ann.vcf --out_tsv {output_dir}/snpeff/{params.sample}.ann.tsv
+
+"""
+
+rule snpeff_merge:
+    output: "{output_dir}/merged_matrix/merged.ann.vcf.gz",
+            "{output_dir}/merged_matrix/merged.ann.tsv"
+    input: "{output_dir}/merged_matrix/merged.raw.vcf"
+    params:
+#        snpeff_jar = config["snpeff_jar_path"],
+        snpeff = config["snpeff_path"],
+        snpeff_conf = config["snpeff_config"],
+        snpeff_genome = config["snpeff_genome"],
+        java = config["java_path"],
+        samplem = "merged",
+        vcfToTable_path = config["vcfToTable_path"]
+    conda:
+        "env_config/snpeff.yaml",
+    resources: threads="2", maxtime="4:00:00", memory="4gb",
+    shell: """
+        {params.snpeff} -c {params.snpeff_conf} {params.snpeff_genome} {output_dir}/merged_matrix/{params.samplem}.raw.vcf > {output_dir}/merged_matrix/{params.samplem}.ann.vcf        
+
+        bgzip {output_dir}/merged_matrix/{params.samplem}.ann.vcf 
+        tabix -p vcf {output_dir}/merged_matrix/{params.samplem}.ann.vcf.gz
+        {params.vcfToTable_path}VCF_printAllTags.sh {output_dir}/merged_matrix/{params.samplem}.ann.vcf.gz > {output_dir}/merged_matrix/{params.samplem}.ann.tsv
+
+"""
+
+rule lumpy:
+    input: "{output_dir}/markdup/{sample}.mkdup.bam"
+    output: "{output_dir}/lumpy/{sample}.raw.vcf"
+    params:
+        sample = lambda wildcards:  wildcards.sample,
+        lumpyexp = config['lumpyexp_path'],
+        lumpy_scripts = config['lumpy_scripts'],
+        ref_fa = config['reference_fasta'],
+        samtools = config['samtools_path'],
+    conda:
+        "env_config/lumpy.yaml",
+    resources: threads="4", maxtime="4:00:00", memory="4gb",
+    shell: """
+        {params.samtools} addreplacerg -r 'ID:1' -r 'LB:1' -r 'SM:1' -o {output_dir}/lumpy/{params.sample}.rg.bam {output_dir}/markdup/{params.sample}.mkdup.bam
+        {params.samtools} index {output_dir}/lumpy/{params.sample}.rg.bam
+
+        {params.samtools} view -b -F 1294 {output_dir}/lumpy/{params.sample}.rg.bam > {output_dir}/lumpy/{params.sample}.discordants.unsorted.bam
+        {params.samtools} view -h {output_dir}/lumpy/{params.sample}.rg.bam | {params.lumpy_scripts}/extractSplitReads_BwaMem -i stdin | {params.samtools} view -Sb - > {output_dir}/lumpy/{params.sample}.splitters.unsorted.bam
+
+        {params.samtools} sort -T /scratch/samtools_lumpyd_{params.sample} -m 512M {output_dir}/lumpy/{params.sample}.discordants.unsorted.bam > {output_dir}/lumpy/{params.sample}.discordants.bam
+        {params.samtools} sort -T /scratch/samtools_lumpys_{params.sample} -m 512M {output_dir}/lumpy/{params.sample}.splitters.unsorted.bam > {output_dir}/lumpy/{params.sample}.splitters.bam
+
+        {params.lumpyexp} -B {output_dir}/lumpy/{params.sample}.rg.bam -S {output_dir}/lumpy/{params.sample}.splitters.bam -D {output_dir}/lumpy/{params.sample}.discordants.bam -o {output_dir}/lumpy/{params.sample}.raw.vcf
+
+"""
+
+rule minimap:
+    input: expand("{assembly_path}/assembly/{sample}/scaffolds.fasta", sample=sample_list, assembly_path=config["assembly_path"]),
+    output: "{output_dir}/assembly/{sample}/scaffolds_to_ref.bam"
+    params:
+        sample = lambda wildcards:  wildcards.sample,
+        ref =  config['reference_fasta'],
+        minimap = config["minimap2_path"],
+        samtools = config["samtools_path"],
+        assembly_path = config["assembly_path"]
+    conda:
+        "env_config/minimap.yaml",
+    resources: threads="2", maxtime="1:00:00", memory="2gb",
+    shell: """
+        {params.minimap} -x asm5 -a {params.ref} {params.assembly_path}/assembly/{params.sample}/scaffolds.fasta | {params.samtools} sort > "{output_dir}/assembly/{params.sample}/scaffolds_to_ref.bam"
+        {params.samtools} index {output_dir}/assembly/{params.sample}/scaffolds_to_ref.bam
+"""
+
+rule quast_qc:
+    input:
+        expand("{assembly_path}/assembly/{sample}/scaffolds.fasta", sample=sample_list, assembly_path=config["assembly_path"]),
+    output:
+        "{output_dir}/quast_reports/report.html",
+    params:
+        quast = config["quast_path"],
+        output_dir = config["output_dir"],
+    conda:
+        "env_config/quast_qc.yaml",
+    shell: """
+        {params.quast} -o {output_dir}/quast_reports {input}
+"""
+
+
+#rule prokka_annotation:
+#    input: "{output_dir}/assembly/{sample}/scaffolds.fasta",
+#    output: "{output_dir}/annotation/{sample}/{sample}.gbk",
+#    params:
+#            prokka = config['prokka_path'],
+#            sample = lambda wildcards:  wildcards.sample,
+#    conda:
+#        "env_config/prokka_annotation.yaml",
+#    shell: """
+#            {params.prokka} --force --outdir {output_dir}/annotation/{params.sample} --prefix {params.sample} {output_dir}/assembly/{params.sample}/scaffolds.fasta
+#"""
+

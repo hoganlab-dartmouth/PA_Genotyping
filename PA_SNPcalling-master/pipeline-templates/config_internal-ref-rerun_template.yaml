@@ -1,0 +1,43 @@
+
+sample_tsv: "sample_fastq_list.txt"
+output_dir: "/dartfs-hpc/rc/lab/H/HoganD/Genomic_analyses/DH2417vDH2415_20240411" #note, no "/" at end of path
+assembly_path: "/dartfs-hpc/rc/lab/H/HoganD/Genomic_analyses/DH2415_DH2417_newsetup_20240408" #points to prior pipeline run directory, where spades and prokka were already performed
+
+fastqc_path: "fastqc"
+
+trimmomatic_path: "trimmomatic"
+trimmomatic_adapters: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/Trimmomatic-0.39/adapters/TruSeq3-PE-2.fa"
+
+picard_path: "picard"
+java_path: "java"
+
+samtools_path: "samtools"
+bcftools_path: "bcftools"
+
+aligner_name: "bwa"
+aligner_path: "bwa"
+aligner_index: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/PA_SNPcalling-master/ref/Pseudomonas_aeruginosa_DH2415.fna" 
+
+
+reference_fasta: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/PA_SNPcalling-master/ref/Pseudomonas_aeruginosa_DH2415.fna"
+annotation_gff: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/PA_SNPcalling-master/ref/Pseudomonas_aeruginosa_DH2415.gff"
+
+freebayes_path: "freebayes"
+
+spades_path: "spades.py"
+
+
+snpeff_path: "snpEff"
+snpeff_config: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/snpeff/snpEff.config"
+snpeff_genome: "Pseudomonas_aeruginosa_DH2415"
+
+minimap2_path: "minimap2"
+
+lumpy_scripts: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/lumpy-sv_scripts/"
+lumpyexp_path: "lumpyexpress"
+
+quast_path: "quast.py"
+prokka_path: "prokka"
+
+vcfToTable_path: "/dartfs-hpc/rc/lab/H/HoganD/GMBSR/vcfToTable-master/"
+

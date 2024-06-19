@@ -1,0 +1,8 @@
+name: quast_qc
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - quast
+#  - python

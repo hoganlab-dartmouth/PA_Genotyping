@@ -1,0 +1,12 @@
+name: snpeff
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - snpeff=5.2
+  - vcf2tsvpy
+  - bcftools
+  - tabix
+  - samtools
+#  - bgzip=1.10.2 #it looks like bgzip is a part of samtools

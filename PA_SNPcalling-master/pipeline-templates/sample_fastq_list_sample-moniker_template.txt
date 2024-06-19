@@ -1,0 +1,2 @@
+sample_id	fastqc_sample_label	fastq_1	fastq_2
+J215	4600_1_S28_R1_001	/dartfs-hpc/rc/lab/H/HoganD/Seq_data/J215_DH2403_SeqCoast-4600/J215_DH2403_SeqCoast_results_20240209/4600-selected/4600_1_S28_R1_001.fastq.gz	/dartfs-hpc/rc/lab/H/HoganD/Seq_data/J215_DH2403_SeqCoast-4600/J215_DH2403_SeqCoast_results_20240209/4600-selected/4600_1_S28_R2_001.fastq.gz

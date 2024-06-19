@@ -1,0 +1,9 @@
+name: lumpy
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - lumpy-sv
+  - samtools
+  - pysam

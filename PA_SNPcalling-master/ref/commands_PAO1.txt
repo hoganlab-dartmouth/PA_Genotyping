@@ -1,0 +1,19 @@
+#Download reference and annotation
+#wget https://www.pseudomonas.com/downloads/pseudomonas/pgd_r_20_2/Pseudomonas_aeruginosa_UCBPP-PA14_109/Pseudomonas_aeruginosa_UCBPP-PA14_109.fna.gz
+#wget https://www.pseudomonas.com/downloads/pseudomonas/pgd_r_20_2/Pseudomonas_aeruginosa_UCBPP-PA14_109/Pseudomonas_aeruginosa_UCBPP-PA14_109.gff.gz
+#gunzip Pseudomonas_aeruginosa_UCBPP-PA14_109.fna.gz
+#gunzip Pseudomonas_aeruginosa_UCBPP-PA14_109.gff.gz
+
+#Create BWA Index
+#/dartfs-hpc/rc/lab/G/GMBSR_bioinfo/misc/sullivan/tools/bwa/bwa-0.7.17/bwa index Pseudomonas_aeruginosa_UCBPP-PA14_109.fna
+
+
+Actual commands:
+cd /dartfs-hpc/rc/home/c/f006rxc/PA_SNPcalling-master/ref/
+cp /dartfs-hpc/rc/lab/H/HoganD/GMBSR/snpeff/data/genomes/Pseudomonas_aeruginosa_PAO1.fna ./
+cp /dartfs-hpc/rc/lab/H/HoganD/GMBSR/snpeff/data/Pseudomonas_aeruginosa_PAO1/Pseudomonas_aeruginosa_PAO1.renamed.gff ./
+cd ..
+conda activate .snakemake/conda/6d212524ab392aaad871c804416a55ea_ #this is the alignment environment containing bwa0.7.17
+cd ./ref
+bwa index Pseudomonas_aeruginosa_PAO1.fna
+cp ./Pseudomonas_aeruginosa_PAO1.renamed.gff ./Pseudomonas_aeruginosa_PAO1.gff #just in case the "renamed" field is okay for some tools but causes problems elsewhere with annotation

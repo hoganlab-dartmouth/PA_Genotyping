@@ -1,0 +1,8 @@
+name: trim_merge
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - trimmomatic
+  - bioconda::java-jdk
